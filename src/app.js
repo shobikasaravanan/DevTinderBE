@@ -1,8 +1,12 @@
 const express = require("express");
 const app = express()
-
 const connectDB = require("./config/database")
 const User = require("./models/user")
+const {validateSignupData} = require("./utils/validations");
+const cookieParser = require("cookie-parser");
+const jwt = require('jsonwebtoken');
+const { userAuth } = require("./middlewares/auth");
+const bcrypt = require("bcrypt");
 
 connectDB().then(() => {
     console.log("Database connection established")
@@ -10,29 +14,65 @@ connectDB().then(() => {
 }).catch(() => console.log("Error occured in DB connection"))
 
 app.use(express.json())
+app.use(cookieParser())
+
 app.post("/signup", async (req, res) => {
-    // const userObj = new User({
-    //     first_name: "ms",
-    //     last_name: "dhoni",
-    //     age: 46,
-    //     gender: 'male',
-    //     phone_number: '9284844933',
-    //     email: "msdhoni@gmail.com"
-    // })
-    // console.log("req.body", req.body)
-    const userObj = new User(req.body)
     try {
+        validateSignupData(req)
+        const {first_name, last_name, password, email, gender, phone_number, skills, about, age} = req.body
+        const passwordHash = await bcrypt.hash(password, 10)
+        const userObj = new User({first_name, last_name, password: passwordHash, email, gender, phone_number, skills, about, age})
         await userObj.save()
         res.status(201).send("User added successfully!")
     } catch(err) {
-        res.status(400).send("Error adding user!")
+        res.status(400).send("Error adding user!"+err.message)
     }
 })
 
-app.get("/user", async (req, res) => {
-   const user = await User.find({email: req.body.email})
-   console.log("user", user, req.body.email)
+app.post("/login", async (req, res, next) => {
+    try {
+        const {email, password} = req.body;
+        const user = await User.findOne({email})
+        if(!user) {
+            res.status(400).send('User not found')
+        }
+        console.log("helo")
+        const isPasswordValid = await user.validatePassword(password)
+        if(isPasswordValid) {
+            const token = await user.createToken()
+            res.cookie("token", token)
+            res.status(200).send('Login Successfull!!!')
+        } else
+            throw new Error("Login unsuccessfull!!!")
+    } catch(err) {
+        res.status(400).send("Error adding user!"+err.message)
+    }
+})
+
+app.get("/profile", async (req, res, next) => {
+    try {
+        const {token} = req.cookies
+        const decodedMessage = await jwt.verify(token, "DevTinder@777")
+        const {_id } = decodedMessage
+        if(!token) {
+            throw new Error("User is not valid")
+        } else {
+            const user = await User.findOne({_id: _id})
+            if(user) {
+                res.status(200).send(user)
+            } else {
+                throw new Error("User not found")
+            }
+        }
+    } catch(err) {
+        res.status(400).send("Error ! "+err.message)
+    }
+})
+
+app.get("/user", userAuth, async (req, res) => {
    try {
+    const user = await User.find({email: req.body.email})
+    console.log("user", user, req.body.email)
      if(user) {
         res.status(200).send(user)
      } else {
@@ -43,9 +83,9 @@ app.get("/user", async (req, res) => {
    }
 })
 
-app.get("/users", async (req, res) => {
-    const user = await User.find()
+app.get("/users", userAuth, async (req, res) => {
     try {
+      const user = await User.find()
       if(user.length) {
          res.status(200).send(user)
       } else {
@@ -55,6 +95,80 @@ app.get("/users", async (req, res) => {
          res.status(400).send("Error occured")
     }
  })
+
+ app.get("/userByID", userAuth, async (req, res) => {
+    try {
+      const user = await User.find({_id: req.body.id})
+      if(user) {
+         res.status(200).send(user)
+      } else {
+         res.status(400).send("User not found")
+      }
+    } catch(err) {
+         res.status(400).send("Error occured")
+    }
+ })
+
+app.patch("/user/:userID", userAuth, async (req, res) => {
+    try {
+        const allowedFieldsUpdate = ["first_name", "age", "skills", "gender", "phone_number"]
+
+        const isAllowed = Object.keys(req.body).every(val => allowedFieldsUpdate.includes(val))
+        if(!Object.keys(req.body).length) {
+            throw new Error("Nothing to update, send fields")
+        }        
+        if(!isAllowed) {
+            throw new Error("Fields are not allowed")
+        }
+        const user = await User.findByIdAndUpdate({_id: req.params.userID}, req.body, {returnDocument: "after", runValidators: true},
+        )
+        console.log(user)
+        if(user) {
+            res.status(200).send("user updated successfully")
+         } else {
+            res.status(400).send("User not found")
+         }
+    } catch(err) {
+        res.status(400).send("Error occured: "+err.message)
+
+    }
+})
+
+app.put("/user", async (req, res) => {
+    try {
+        const user = await User.findOneAndReplace({_id: req.body.id}, req.body)
+        console.log(user)
+        if(user) {
+            res.status(200).send("user replaced successfully")
+         } else {
+            res.status(400).send("User not found")
+         }
+    } catch(err) {
+        res.status(400).send("Error occured")
+
+    }
+})
+
+app.delete("/user/:userID", async (req, res) => {
+    try {
+        const user = await User.findByIdAndDelete({_id: req.params.userID})
+        console.log(user)
+        if(user) {
+            res.status(200).send("user deleted successfully")
+         } else {
+            res.status(400).send("User not found")
+         }
+    } catch(err) {
+        res.status(400).send("Error occured")
+    }
+})
+
+
+
+
+
+
+
 
 // const {auth} = require("./middlewares/auth")
 // app.use("/admin", auth)

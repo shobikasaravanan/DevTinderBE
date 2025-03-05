@@ -1,17 +1,25 @@
-const auth = (req, res, next) => {
-    console.log("let's authorize")
-    const token = 'xyz'
-    const isAuthorized = token === 'xyz';
-    if(isAuthorized){
-        console.log("Authorized token")
-        // res.status("200").send('user authorized')
-        next()
-    } else {
-        console.log("Authorization failed")
-        res.status("401").send('unauthorized')
-    }
+const jwt = require('jsonwebtoken');
+const User = require('../models/user');
+const userAuth = async (req, res, next) => {
+    try {
+            const { token } = req.cookies
+            if(!token) {
+                throw new Error("User token is not valid")
+            } else {
+                const decodedMessage = await jwt.verify(token, "DevTinder@777")
+                const { _id } = decodedMessage
+                const user = await User.findOne({_id: _id})
+                if(user) {
+                    next()
+                } else {
+                throw new Error("Unauthorised")
+                }
+            }
+        } catch(err) {
+            res.status(401).send("Error ! "+ err.message)
+        }
 }  
 
 module.exports= {
-    auth
+    userAuth
 }
