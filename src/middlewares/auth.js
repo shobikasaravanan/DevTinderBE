@@ -10,6 +10,7 @@ const userAuth = async (req, res, next) => {
                 const { _id } = decodedMessage
                 const user = await User.findOne({_id: _id})
                 if(user) {
+                    req.user = user
                     next()
                 } else {
                 throw new Error("Unauthorised")

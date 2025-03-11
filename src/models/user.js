@@ -18,11 +18,14 @@ const userSchema = new mongoose.Schema({
     gender: { 
         type: String,
         default: "Male", 
-        validate(value) {
-            if(!value.includes('male', 'female', 'others')) {
-                return false
-            }
+        enum: { values: ['male', 'female', 'others'],
+            message: `{VALUE} is incorrect`
         }
+        // validate(value) {
+        //     if(!value.includes('male', 'female', 'others')) {
+        //         return false
+        //     }
+        // }
     },
     phone_number: { 
         type: String,
@@ -36,8 +39,7 @@ const userSchema = new mongoose.Schema({
     email: { 
         type: String,
         required: true,
-        index:true,
-            unique: true,
+        unique: true,
         validate(value) {
             if(!validator.isEmail(value)) {
                 throw new Error("Invalid Email Address")
@@ -58,7 +60,6 @@ const userSchema = new mongoose.Schema({
 }, { timestamps: true })
 
 userSchema.methods.validatePassword = async function(password) {
-    console.log(password, "passwr")
     const user = this
     return await bcrypt.compare(password, user.password) 
 }
@@ -69,5 +70,6 @@ userSchema.methods.createToken = async function() {
     return token
 }
 
+userSchema.index({first_name: 1, last_name: 1})
 
 module.exports =  mongoose.model("User", userSchema)
